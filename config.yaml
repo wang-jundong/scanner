@@ -1,0 +1,130 @@
+# Solana smart-wallet scanner
+# Example profile shape (Grapes.b5): wr>58%, pnl>20%, txs>200, created_tokens=0, not bot
+
+chain: sol
+period: 7d
+
+# GMGN auth — required to read UI winrate for wallets NOT on the leaderboard
+# (Grapes.b5). Prefer putting the token in .gmgn_token (gitignored), not here.
+gmgn:
+  # Preferred: official OpenAPI key (no 30m expiry) — https://gmgn.ai/ai
+  api_key: ""               # or set env GMGN_API_KEY
+  api_key_file: .gmgn_api_key
+  # Fallback: browser Bearer JWT (~30m)
+  access_token: ""          # or set env GMGN_ACCESS_TOKEN
+  token_file: .gmgn_token   # one line: raw JWT / Bearer token from browser
+
+filters:
+  min_winrate: 0.58
+  min_pnl: 0.20
+  min_txs_7d: 200
+  max_txs_7d: 5000
+  # Soft floor only — not used for sniper detection (see anti_sniper)
+  min_buy_ratio: 0.15
+
+anti_minter:
+  max_created_tokens: 0
+
+# Snipers buy within seconds of token open / right after the dev buy — not buy≪sell.
+anti_sniper:
+  enabled: true
+  # Reject if this fraction of recent buys land within max_seconds_after_open of open_timestamp
+  max_snipe_ratio: 0.35
+  max_seconds_after_open: 3
+  # Fewer samples — still enough signal; open_timestamp is cached across wallets
+  sample_buys: 20
+
+exclude_tags:
+  - wash_trader
+  - top_dev
+  - snipe_bot
+  - sniper
+  - bundler
+  - sandwich_bot
+  - rat_trader
+
+prefer_tags:
+  - axiom
+  - arbitrager
+  - smart_degen
+  - pump_smart
+  - renowned
+  - kol
+  - gmgn
+  - photon
+  - padre
+
+leaderboard:
+  # Off for short JWT enrich runs (hub cache is the Grapes path); Cloudflare often 403s rank
+  enabled: false
+  tags:
+    - axiom
+    - arbitrager
+    - smart_degen
+    - pump_smart
+    - renowned
+    - kol
+    - fresh_wallet
+    - gmgn
+    - photon
+    - padre
+    - all
+  orderbys:
+    - pnl_7d
+    - winrate_7d
+    - txs_7d
+
+# Needs GMGN access token (profit_stat) for real winrate on non-ranked makers
+trade_discovery:
+  enabled: false
+  # Hub expansion + cache is the main Grapes-like path; keep trades off during short JWT runs
+  timeframes: ["5m", "1h"]
+  orderbys: ["volume", "swaps"]
+  tokens_limit: 20
+  trades_per_token: 40
+  trade_pages: 1
+  max_candidates: 250
+  prefer_only: false
+
+# 2-hop hub expansion: trending → axiom/arbitrager hubs → their tokens → traders
+# This reaches wallets (e.g. Grapes.b5) whose tokens never appear on trending ranks.
+hub_expansion:
+  enabled: true
+  timeframes: ["5m", "1h", "6h"]
+  orderbys: ["volume", "swaps"]
+  tokens_limit: 30
+  # Hop3 reaches niche mints hop1 trending hubs never trade (Grapes path)
+  hops: 3
+  # Free plan Weight 5: activity/stats cost 3 → ~1.5 calls/sec
+  hubs_per_hop: 100
+  activity_pages: 2
+  expand_tokens: 2000
+  traders_limit: 100
+  delay_sec: 0.0
+  # Leaky bucket serializes HTTP; 1 worker avoids pile-up
+  trader_workers: 1
+  activity_workers: 1
+  max_long_tail: 2000
+  # Historical miss: h2 rank ~4813 vs limit 3500
+  prescreen_limit: 8000
+  prescreen_workers: 1
+  hit_cache_ttl_sec: 21600
+  enrich_workers: 1
+  # Match gmgn.ai Free 5/5 (set 18/20 for Plus, 45/50 for Pro)
+  openapi_rate: 4.5
+  openapi_capacity: 5
+  # Hub discovery takes ~30-50m; cache so JWT enrich can run after
+  # Keep hub graph across JWT cycles; empty refresh must not wipe it
+  cache_ttl_sec: 86400
+  # Prefer extend hop3 on existing cache (faster than full rebuild)
+  force_refresh: false
+  extend_cache: true
+
+seed_discovery:
+  enabled: false
+  wallets: []
+
+# No fixed sleep between calls — gmgn.py backs off only on 429/5xx
+request_delay_sec: 0
+output_dir: output
+loop_interval_sec: 0
